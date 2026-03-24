@@ -102,6 +102,16 @@ export default function ComparisonTable({
                 </td>
               ))}
             </tr>
+            {scenarios.some((s) => s.monthly.rdsp > 0) && (
+              <tr>
+                <td className="row-label">Monthly to RDSP</td>
+                {scenarios.map((s) => (
+                  <td key={s.id} className={s.id === recommendedId ? 'recommended-col' : ''}>
+                    {s.monthly.rdsp > 0 ? fmtFull(s.monthly.rdsp) : '—'}
+                  </td>
+                ))}
+              </tr>
+            )}
             <tr>
               <td className="row-label">Monthly to regular account</td>
               {scenarios.map((s) => (

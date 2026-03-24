@@ -281,6 +281,84 @@ export default function ProfileForm({
           </div>
         </div>
 
+        {/* Section 4: RDSP (Optional) */}
+        <div className="form-section optional-section">
+          <button
+            type="button"
+            className="optional-section-toggle"
+            onClick={() => onUpdate('rdspEnabled', !profile.rdspEnabled)}
+            aria-expanded={profile.rdspEnabled}
+          >
+            <span className="optional-toggle-left">
+              <span className="optional-icon">♿</span>
+              <span>
+                <strong>RDSP (Registered Disability Savings Plan)</strong>
+                <span className="optional-hint">
+                  Only if you or your dependent qualify for the Disability Tax Credit
+                </span>
+              </span>
+            </span>
+            <span className={`optional-chevron ${profile.rdspEnabled ? 'open' : ''}`}>▾</span>
+          </button>
+
+          {profile.rdspEnabled && (
+            <div className="optional-section-body">
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+                The RDSP is a powerful savings tool — the government can match your contributions
+                up to 300% and add up to $1,000/year in bonds even without contributions.
+                You&apos;re eligible if you have a valid Disability Tax Credit (DTC) certificate.
+              </div>
+              <div className="form-grid three-col">
+                <div className="form-field">
+                  <label>Current RDSP Balance</label>
+                  <span className="field-hint">How much is in the RDSP now</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={profile.rdspBalance}
+                    onChange={(e) => onUpdate('rdspBalance', +e.target.value)}
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Family Net Income</label>
+                  <span className="field-hint">
+                    Used to calculate government grants and bonds
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={profile.rdspFamilyIncome}
+                    onChange={(e) => onUpdate('rdspFamilyIncome', +e.target.value)}
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Age of Beneficiary</label>
+                  <span className="field-hint">
+                    Grants/bonds stop at age 49
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={80}
+                    value={profile.age}
+                    disabled
+                  />
+                </div>
+              </div>
+              <div className="rdsp-info-banner">
+                <span>💡</span>
+                <span>
+                  If family income is under $114,750, the government matches your first $1,500 at
+                  <strong> 3-to-1</strong> (300%). That&apos;s $4,500 in grants for just $1,500 contributed.
+                  {profile.rdspFamilyIncome > 0 && profile.rdspFamilyIncome <= 37487 && (
+                    <> Plus you qualify for the full <strong>$1,000 bond</strong> — no contribution needed.</>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Submit */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button

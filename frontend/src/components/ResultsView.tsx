@@ -71,6 +71,12 @@ export default function ResultsView({
           <div className="stat-value">{fmtK(contributionRooms.rrsp)}</div>
           <div className="stat-label">RRSP Room Left</div>
         </div>
+        {contributionRooms.rdspEnabled && (
+          <div className="tax-stat">
+            <div className="stat-value">{fmtK(contributionRooms.rdspGrant + contributionRooms.rdspBond)}</div>
+            <div className="stat-label">RDSP Govt Match/yr</div>
+          </div>
+        )}
       </div>
 
       {/* Personalized Tips */}

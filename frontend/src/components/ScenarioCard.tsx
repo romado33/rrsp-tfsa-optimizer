@@ -67,6 +67,12 @@ export default function ScenarioCard({
               <td>{fmtFull(scenario.monthly.fhsa)}</td>
             </tr>
           )}
+          {scenario.monthly.rdsp > 0 && (
+            <tr>
+              <td>♿ RDSP / month</td>
+              <td>{fmtFull(scenario.monthly.rdsp)}</td>
+            </tr>
+          )}
           {scenario.monthly.nonRegistered > 0 && (
             <tr>
               <td>📈 Regular account / month</td>

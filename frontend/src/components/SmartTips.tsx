@@ -143,6 +143,22 @@ function generateTips(
     });
   }
 
+  if (rooms.rdspEnabled && rooms.rdspGrant > 0) {
+    const govMoney = rooms.rdspGrant + rooms.rdspBond;
+    tips.push({
+      icon: '♿',
+      title: `Government will add ${fmtFull(govMoney)}/year to your RDSP`,
+      body:
+        rooms.rdspBond > 0
+          ? `By contributing just ${fmtFull(rooms.rdsp)}/year, you unlock ${fmtFull(rooms.rdspGrant)} in matching grants. ` +
+            `Plus, you qualify for a ${fmtFull(rooms.rdspBond)} bond — no contribution needed. ` +
+            `That's ${fmtFull(govMoney)} in free government money every year.`
+          : `By contributing just ${fmtFull(rooms.rdsp)}/year, you unlock ${fmtFull(rooms.rdspGrant)} in government matching grants. ` +
+            `That's a ${Math.round((rooms.rdspGrant / rooms.rdsp) * 100)}% return before your money even starts growing.`,
+      type: 'money',
+    });
+  }
+
   if (profile.rrspRoom > 20000) {
     tips.push({
       icon: '📋',

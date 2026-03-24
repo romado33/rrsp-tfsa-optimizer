@@ -23,6 +23,37 @@ const GLOSSARY_ENTRIES = [
       '(like a TFSA). It\u2019s the best of both worlds \u2014 but only for your first home purchase.',
   },
   {
+    term: 'RDSP (Registered Disability Savings Plan)',
+    definition:
+      'A long-term savings plan for Canadians who qualify for the Disability Tax Credit (DTC). ' +
+      'The government can match your contributions up to 300% (Canada Disability Savings Grant) and ' +
+      'add up to $1,000/year in bonds even if you don\u2019t contribute anything (Canada Disability Savings Bond). ' +
+      'Withdrawals are taxable, and the account must stay open for at least 10 years before withdrawing. ' +
+      'Grants and bonds stop the year you turn 49, but the account can keep growing after that.',
+  },
+  {
+    term: 'Canada Disability Savings Grant (CDSG)',
+    definition:
+      'Free money the government adds to your RDSP when you contribute. If your family income is under ' +
+      '$114,750, the government matches 300% on your first $500 and 200% on the next $1,000 \u2014 that\u2019s ' +
+      'up to $3,500/year in grants for just $1,500 contributed. Higher incomes get 100% matching on the ' +
+      'first $1,000. Lifetime max: $70,000 in grants.',
+  },
+  {
+    term: 'Canada Disability Savings Bond (CDSB)',
+    definition:
+      'Money the government puts into your RDSP even if you contribute nothing. If your family income is ' +
+      'under $37,487, you get the full $1,000/year. Partial bonds are available up to $57,375 income. ' +
+      'Lifetime max: $20,000 in bonds. You just need an open RDSP and a valid DTC.',
+  },
+  {
+    term: 'Disability Tax Credit (DTC)',
+    definition:
+      'A non-refundable tax credit for people with a severe and prolonged impairment. You need a medical ' +
+      'practitioner to certify your condition on Form T2201. Having the DTC is what makes you eligible ' +
+      'for the RDSP and its government grants and bonds.',
+  },
+  {
     term: 'Contribution Room',
     definition:
       'The maximum amount you\u2019re allowed to put into an account (RRSP, TFSA, or FHSA) this year. ' +

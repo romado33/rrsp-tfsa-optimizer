@@ -72,6 +72,8 @@ const RRSP_MAX_2025      = 32490; // CRA annual RRSP deduction limit for 2025
 const TFSA_LIMIT_2025    = 7000;  // New TFSA room added in 2025
 const FHSA_ANNUAL_LIMIT  = 8000;  // Max new FHSA contributions per year
 const FHSA_LIFETIME_MAX  = 40000; // Lifetime FHSA contribution ceiling
+const RDSP_LIFETIME_MAX  = 200000; // Lifetime RDSP contribution ceiling
+const RDSP_GRANT_MAX_AGE = 49;    // Grants/bonds stop the year you turn 49
 
 const NUM_SIMULATIONS = 1000;
 const RETIREMENT_TAX_RATE = 0.20; // Estimated tax rate when you withdraw RRSP money in retirement
@@ -172,6 +174,73 @@ function calcFHSAEligibility(profile) {
   return { eligible: true, annualRoom, lifetimeRemaining };
 }
 
+/**
+ * Calculates RDSP government grant and bond amounts for the year.
+ *
+ * The RDSP is unique: the government MATCHES your contributions (up to 300%)
+ * and may also deposit a bond ($1,000/year) even if you contribute nothing.
+ *
+ * Grant rates (2025, based on family net income):
+ *   Income <= $114,750:
+ *     - 300% on first $500 you contribute = up to $1,500
+ *     - 200% on next $1,000 you contribute = up to $2,000
+ *     - Total max grant: $3,500/year
+ *   Income > $114,750:
+ *     - 100% on first $1,000 you contribute = up to $1,000/year
+ *
+ * Bond (no contribution needed):
+ *   Income <= $37,487: $1,000/year
+ *   Income $37,487–$57,375: partial (pro-rated)
+ *   Income > $57,375: $0
+ *
+ * @param {object} profile
+ * @param {number} contribution - How much the user contributes to RDSP this year
+ * @returns {{ grant, bond, totalGovernment, contribution, eligible }}
+ */
+function calcRDSP(profile, contribution = 1500) {
+  if (!profile.rdspEnabled || profile.age > RDSP_GRANT_MAX_AGE) {
+    return { grant: 0, bond: 0, totalGovernment: 0, contribution: 0, eligible: false };
+  }
+
+  const income = profile.rdspFamilyIncome || profile.annualIncome;
+
+  let grant = 0;
+  if (income <= 114750) {
+    const tier1 = Math.min(contribution, 500);
+    const tier2 = Math.min(Math.max(0, contribution - 500), 1000);
+    grant = tier1 * 3 + tier2 * 2;
+  } else {
+    grant = Math.min(contribution, 1000) * 1;
+  }
+  grant = Math.min(grant, 3500);
+
+  let bond = 0;
+  if (income <= 37487) {
+    bond = 1000;
+  } else if (income <= 57375) {
+    bond = Math.round(1000 * (1 - (income - 37487) / (57375 - 37487)));
+  }
+
+  return {
+    grant: Math.round(grant),
+    bond: Math.round(bond),
+    totalGovernment: Math.round(grant + bond),
+    contribution: Math.round(contribution),
+    eligible: true,
+  };
+}
+
+/**
+ * Calculates the optimal RDSP contribution to maximize the government grant.
+ * For income <= $114,750: contribute $1,500 to get the max $3,500 grant.
+ * For income > $114,750: contribute $1,000 to get the max $1,000 grant.
+ */
+function calcOptimalRDSPContribution(profile) {
+  if (!profile.rdspEnabled || profile.age > RDSP_GRANT_MAX_AGE) return 0;
+  const income = profile.rdspFamilyIncome || profile.annualIncome;
+  return income <= 114750 ? 1500 : 1000;
+}
+
 // ─── SCENARIO DEFINITIONS ─────────────────────────────────────────────────────
 
 /**
@@ -203,10 +272,15 @@ function buildScenarios(profile) {
   const tfsaRoom = calcTFSARoom(profile);
   const fhsa     = calcFHSAEligibility(profile);
 
+  // RDSP: carve out optimal contribution first (to maximize free government money)
+  const rdspOptimal = calcOptimalRDSPContribution(profile);
+  const rdspBase    = Math.min(rdspOptimal, annualSavings);
+
   // Cap contributions at available room
-  const maxRRSP  = Math.min(annualSavings, rrspRoom);
-  const maxTFSA  = Math.min(annualSavings, tfsaRoom);
-  const maxFHSA  = fhsa.eligible ? Math.min(annualSavings, fhsa.annualRoom) : 0;
+  const savingsAfterRDSP = annualSavings - rdspBase;
+  const maxRRSP  = Math.min(savingsAfterRDSP, rrspRoom);
+  const maxTFSA  = Math.min(savingsAfterRDSP, tfsaRoom);
+  const maxFHSA  = fhsa.eligible ? Math.min(savingsAfterRDSP, fhsa.annualRoom) : 0;
 
   const marginalRate = Math.round(calculateMarginalRate(profile.annualIncome, profile.province) * 100);
 
@@ -217,7 +291,8 @@ function buildScenarios(profile) {
 
   // ── Scenario A: RRSP Maximizer ──────────────────────────────────────────────
   const a_fhsa   = fhsaBase;
-  const a_rem0   = annualSavings - a_fhsa;
+  const a_rdsp   = rdspBase;
+  const a_rem0   = annualSavings - a_fhsa - a_rdsp;
   const a_rrsp   = Math.min(a_rem0, maxRRSP);
   const a_rem1   = a_rem0 - a_rrsp;
   const a_tfsa   = Math.min(a_rem1, maxTFSA);
@@ -225,7 +300,8 @@ function buildScenarios(profile) {
 
   // ── Scenario B: TFSA Maximizer ──────────────────────────────────────────────
   const b_fhsa   = fhsaBase;
-  const b_rem0   = annualSavings - b_fhsa;
+  const b_rdsp   = rdspBase;
+  const b_rem0   = annualSavings - b_fhsa - b_rdsp;
   const b_tfsa   = Math.min(b_rem0, maxTFSA);
   const b_rem1   = b_rem0 - b_tfsa;
   const b_rrsp   = Math.min(b_rem1, maxRRSP);
@@ -235,8 +311,9 @@ function buildScenarios(profile) {
   let scenarioC;
   if (fhsa.eligible && maxFHSA > 0) {
     const c_fhsa   = maxFHSA;
-    const c_rem    = annualSavings - c_fhsa;
-    const c_rrsp   = Math.min(c_rem * 0.6, maxRRSP);   // 60% of remainder to RRSP
+    const c_rdsp   = rdspBase;
+    const c_rem    = annualSavings - c_fhsa - c_rdsp;
+    const c_rrsp   = Math.min(c_rem * 0.6, maxRRSP);
     const c_tfsa   = Math.min(c_rem - c_rrsp, maxTFSA);
     const c_nonreg = Math.max(0, c_rem - c_rrsp - c_tfsa);
     scenarioC = {
@@ -252,13 +329,16 @@ function buildScenarios(profile) {
         rrsp: Math.round(c_rrsp),
         tfsa: Math.round(c_tfsa),
         fhsa: Math.round(c_fhsa),
+        rdsp: Math.round(c_rdsp),
         nonRegistered: Math.round(c_nonreg),
       },
     };
   } else {
-    const c_rrsp   = Math.min(annualSavings * 0.5, maxRRSP);
-    const c_tfsa   = Math.min(annualSavings * 0.5, maxTFSA);
-    const c_nonreg = Math.max(0, annualSavings - c_rrsp - c_tfsa);
+    const c_rdsp   = rdspBase;
+    const c_rem    = annualSavings - c_rdsp;
+    const c_rrsp   = Math.min(c_rem * 0.5, maxRRSP);
+    const c_tfsa   = Math.min(c_rem * 0.5, maxTFSA);
+    const c_nonreg = Math.max(0, c_rem - c_rrsp - c_tfsa);
     scenarioC = {
       id: 'balanced_split',
       name: 'Even Split',
@@ -272,6 +352,7 @@ function buildScenarios(profile) {
         rrsp: Math.round(c_rrsp),
         tfsa: Math.round(c_tfsa),
         fhsa: 0,
+        rdsp: Math.round(c_rdsp),
         nonRegistered: Math.round(c_nonreg),
       },
     };
@@ -279,7 +360,8 @@ function buildScenarios(profile) {
 
   // ── Scenario D: Flexible Growth ─────────────────────────────────────────────
   const d_fhsa   = fhsaBase;
-  const d_rem0   = annualSavings - d_fhsa;
+  const d_rdsp   = rdspBase;
+  const d_rem0   = annualSavings - d_fhsa - d_rdsp;
   const d_rrsp   = Math.min(d_rem0 * 0.25, maxRRSP);
   const d_tfsa   = Math.min(d_rem0 * 0.25, maxTFSA);
   const d_nonreg = Math.max(0, d_rem0 - d_rrsp - d_tfsa);
@@ -298,6 +380,7 @@ function buildScenarios(profile) {
         rrsp: Math.round(a_rrsp),
         tfsa: Math.round(a_tfsa),
         fhsa: Math.round(a_fhsa),
+        rdsp: Math.round(a_rdsp),
         nonRegistered: Math.round(a_nonreg),
       },
     },
@@ -314,6 +397,7 @@ function buildScenarios(profile) {
         rrsp: Math.round(b_rrsp),
         tfsa: Math.round(b_tfsa),
         fhsa: Math.round(b_fhsa),
+        rdsp: Math.round(b_rdsp),
         nonRegistered: Math.round(b_nonreg),
       },
     },
@@ -332,6 +416,7 @@ function buildScenarios(profile) {
         rrsp: Math.round(d_rrsp),
         tfsa: Math.round(d_tfsa),
         fhsa: Math.round(d_fhsa),
+        rdsp: Math.round(d_rdsp),
         nonRegistered: Math.round(d_nonreg),
       },
     },
@@ -349,6 +434,8 @@ function buildScenarios(profile) {
  * Tax treatment per account:
  *   - RRSP/FHSA: grow untaxed, but the final value is reduced by RETIREMENT_TAX_RATE
  *                to reflect the tax owing at withdrawal
+ *   - RDSP:     grows untaxed like RRSP; withdrawals are taxable. Government grants
+ *               and bonds are added annually on top of contributions.
  *   - TFSA:      grow untaxed, final value is the real after-tax value
  *   - Non-reg:   annual returns are reduced by NON_REG_TAX_DRAG (represents annual
  *                capital gains tax on realized gains)
@@ -372,10 +459,18 @@ function runMonteCarlo(scenario, profile) {
   const initRRSP   = profile.rrspBalance || 0;
   const initTFSA   = profile.tfsaBalance || 0;
   const initFHSA   = profile.fhsaBalance || 0;
+  const initRDSP   = profile.rdspBalance || 0;
   const initNonReg = profile.nonRegisteredBalance || 0;
 
   // Annual contributions this scenario routes to each account
-  const { rrsp: rrspC, tfsa: tfsaC, fhsa: fhsaC, nonRegistered: nonRegC } = scenario.annual;
+  const { rrsp: rrspC, tfsa: tfsaC, fhsa: fhsaC, rdsp: rdspC = 0, nonRegistered: nonRegC } = scenario.annual;
+
+  // RDSP government money (grants + bonds) added each year
+  const rdspGov = profile.rdspEnabled ? calcRDSP(profile, rdspC) : { grant: 0, bond: 0 };
+  const rdspAnnualTotal = rdspC + rdspGov.grant + rdspGov.bond;
+  const rdspGrantYearsLeft = profile.rdspEnabled
+    ? Math.max(0, RDSP_GRANT_MAX_AGE - profile.age)
+    : 0;
 
   // Whether FHSA should be treated as tax-free (home purchase goal) or RRSP-like
   const fhsaTaxFree = profile.primaryGoal === 'buy_home';
@@ -387,28 +482,29 @@ function runMonteCarlo(scenario, profile) {
     let rrsp   = initRRSP;
     let tfsa   = initTFSA;
     let fhsa   = initFHSA;
+    let rdsp   = initRDSP;
     let nonReg = initNonReg;
 
     for (let year = 0; year < years; year++) {
       const r = normalRandom(allocation.mean, allocation.std);
 
-      // Each account grows at the same simulated return for simplicity.
-      // In reality, different accounts might hold different assets — but for a
-      // demo model, the key differentiator is tax treatment, not asset allocation.
       rrsp   = (rrsp   + rrspC)   * (1 + r);
       tfsa   = (tfsa   + tfsaC)   * (1 + r);
       fhsa   = (fhsa   + fhsaC)   * (1 + r);
 
-      // Non-registered: tax drag on positive returns only
-      // (you can't claim a deduction on paper losses in this simplified model)
+      // RDSP: contributions + grants + bonds while eligible, then just growth
+      const rdspThisYear = year < rdspGrantYearsLeft ? rdspAnnualTotal : rdspC;
+      rdsp = (rdsp + rdspThisYear) * (1 + r);
+
       const nonRegR = r > 0 ? r * (1 - NON_REG_TAX_DRAG) : r;
       nonReg = (nonReg + nonRegC) * (1 + nonRegR);
     }
 
-    // Convert to after-tax net worth equivalent
+    // RDSP withdrawals are taxable, similar to RRSP
     const atRRSP   = rrsp   * (1 - RETIREMENT_TAX_RATE);
+    const atRDSP   = rdsp   * (1 - RETIREMENT_TAX_RATE);
     const atFHSA   = fhsaTaxFree ? fhsa : fhsa * (1 - RETIREMENT_TAX_RATE);
-    finalValues.push(Math.round(atRRSP + tfsa + atFHSA + nonReg));
+    finalValues.push(Math.round(atRRSP + tfsa + atFHSA + atRDSP + nonReg));
   }
 
   finalValues.sort((a, b) => a - b);
@@ -422,6 +518,7 @@ function runMonteCarlo(scenario, profile) {
     let rrsp   = initRRSP;
     let tfsa   = initTFSA;
     let fhsa   = initFHSA;
+    let rdsp   = initRDSP;
     let nonReg = initNonReg;
 
     for (let year = 0; year < years; year++) {
@@ -429,12 +526,17 @@ function runMonteCarlo(scenario, profile) {
       rrsp   = (rrsp   + rrspC)   * (1 + r);
       tfsa   = (tfsa   + tfsaC)   * (1 + r);
       fhsa   = (fhsa   + fhsaC)   * (1 + r);
+
+      const rdspThisYear = year < rdspGrantYearsLeft ? rdspAnnualTotal : rdspC;
+      rdsp = (rdsp + rdspThisYear) * (1 + r);
+
       const nonRegR = r > 0 ? r * (1 - NON_REG_TAX_DRAG) : r;
       nonReg = (nonReg + nonRegC) * (1 + nonRegR);
 
       const atRRSP = rrsp * (1 - RETIREMENT_TAX_RATE);
+      const atRDSP = rdsp * (1 - RETIREMENT_TAX_RATE);
       const atFHSA = fhsaTaxFree ? fhsa : fhsa * (1 - RETIREMENT_TAX_RATE);
-      yearlyBuckets[year].push(Math.round(atRRSP + tfsa + atFHSA + nonReg));
+      yearlyBuckets[year].push(Math.round(atRRSP + tfsa + atFHSA + atRDSP + nonReg));
     }
   }
 
@@ -496,11 +598,11 @@ export function generateScenarioData(profile) {
       byYear:         mc.byYear,
       allocationLabel: mc.allocationLabel,
       rrspTaxSaving,
-      // Monthly breakdown for the UI (annual ÷ 12)
       monthly: {
         rrsp:           Math.round(scenario.annual.rrsp / 12),
         tfsa:           Math.round(scenario.annual.tfsa / 12),
         fhsa:           Math.round(scenario.annual.fhsa / 12),
+        rdsp:           Math.round((scenario.annual.rdsp || 0) / 12),
         nonRegistered:  Math.round(scenario.annual.nonRegistered / 12),
       },
     };
@@ -510,6 +612,9 @@ export function generateScenarioData(profile) {
   const rrspRoom         = calcRRSPRoom(profile);
   const tfsaRoom         = calcTFSARoom(profile);
   const fhsaEligibility  = calcFHSAEligibility(profile);
+  const rdspInfo         = profile.rdspEnabled
+    ? calcRDSP(profile, calcOptimalRDSPContribution(profile))
+    : { grant: 0, bond: 0, totalGovernment: 0, contribution: 0, eligible: false };
 
   return {
     scenarios: scenariosWithProjections,
@@ -519,6 +624,10 @@ export function generateScenarioData(profile) {
       tfsa:         tfsaRoom,
       fhsa:         fhsaEligibility.eligible ? fhsaEligibility.annualRoom : 0,
       fhsaEligible: fhsaEligibility.eligible,
+      rdsp:         rdspInfo.contribution,
+      rdspGrant:    rdspInfo.grant,
+      rdspBond:     rdspInfo.bond,
+      rdspEnabled:  profile.rdspEnabled || false,
     },
   };
 }

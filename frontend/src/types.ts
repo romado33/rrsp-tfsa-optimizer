@@ -28,6 +28,9 @@ export interface FinancialProfile {
   primaryGoal:          'retire' | 'buy_home' | 'fire' | 'wealth';
   timeHorizon:          number;   // Years until goal
   isFirstTimeBuyer:     boolean;
+  rdspEnabled:          boolean;  // Optional: user has DTC eligibility
+  rdspBalance:          number;   // Current RDSP balance
+  rdspFamilyIncome:     number;   // Family net income (determines grant/bond rates)
 }
 
 // ─── SCENARIOS ────────────────────────────────────────────────────────────────
@@ -57,6 +60,7 @@ export interface ContributionBreakdown {
   rrsp:           number;
   tfsa:           number;
   fhsa:           number;
+  rdsp:           number;
   nonRegistered:  number;
 }
 
@@ -133,6 +137,10 @@ export interface ContributionRooms {
   tfsa:         number;
   fhsa:         number;
   fhsaEligible: boolean;
+  rdsp:         number;
+  rdspGrant:    number;
+  rdspBond:     number;
+  rdspEnabled:  boolean;
 }
 
 // ─── API RESPONSE ─────────────────────────────────────────────────────────────

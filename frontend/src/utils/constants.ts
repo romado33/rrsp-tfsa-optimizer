@@ -56,4 +56,7 @@ export const DEFAULT_PROFILE: FinancialProfile = {
   primaryGoal: 'buy_home',
   timeHorizon: 10,
   isFirstTimeBuyer: true,
+  rdspEnabled: false,
+  rdspBalance: 0,
+  rdspFamilyIncome: 0,
 };
